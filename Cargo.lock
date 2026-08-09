@@ -310,21 +310,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "recently-used-xbel"
-version = "1.2.0"
-dependencies = [
- "chrono",
- "dirs",
- "infer",
- "mime_guess",
- "quick-xml",
- "serde",
- "tempfile",
- "thiserror",
- "url",
-]
-
-[[package]]
 name = "redox_users"
 version = "0.4.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -483,6 +468,21 @@ dependencies = [
  "form_urlencoded",
  "idna",
  "percent-encoding",
+]
+
+[[package]]
+name = "user-places-xbel"
+version = "1.2.0"
+dependencies = [
+ "chrono",
+ "dirs",
+ "infer",
+ "mime_guess",
+ "quick-xml",
+ "serde",
+ "tempfile",
+ "thiserror",
+ "url",
 ]
 
 [[package]]

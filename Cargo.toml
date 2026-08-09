@@ -1,11 +1,11 @@
 [package]
-name = "recently-used-xbel"
+name = "user-places-xbel"
 version = "1.2.0"
 edition = "2021"
-description = "Parse the ~/.local/share/recently-used.xbel file"
-repository = "https://github.com/pop-os/recently-used-xbel"
+description = "Parse the ~/.local/share/user-places.xbel file"
+repository = "https://github.com/MikhailValerie/user-places-xbel"
 license = "MPL-2.0"
-keywords = ["recently", "used", "xbel"]
+keywords = ["bookmarks", "user", "places", "xbel"]
 
 [dependencies]
 dirs = "5.0.1"

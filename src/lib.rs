@@ -1,13 +1,13 @@
-// Copyright 2022 System76 <info@system76.com>
+// Copyright 2026 Andrew Moran <developer@moran.io>
 // SPDX-License-Identifier: MPL-2.0
 
-//! Parse the `~/.local/share/recently-used.xbel` file
+//! Parse the `~/.local/share/user-places.xbel` file
 //!
 //! ```
 //! fn main() -> Result<(), Box<dyn std::error::Error>> {
-//!     let recently_used = recently_used_xbel::parse_file()?;
+//!     let user_places = user_places_xbel::parse_file()?;
 //!
-//!     for bookmark in recently_used.bookmarks {
+//!     for bookmark in user_places.bookmarks {
 //!         println!("{:?}", bookmark);
 //!     }
 //!
@@ -28,10 +28,10 @@ use std::{
 use url::Url;
 mod custom_writer;
 
-/// Stores recently-opened files accessed by the desktop user.
+/// Stores places bookmarked by the desktop user
 #[derive(Debug, Clone, Deserialize, Serialize)]
 #[serde(rename = "xbel", rename_all = "kebab-case")]
-pub struct RecentlyUsed {
+pub struct UserPlaces {
     #[serde(rename = "@xmlns:bookmark")]
     pub xmlns_bookmark: String,
     #[serde(rename = "@xmlns:mime")]
@@ -42,7 +42,7 @@ pub struct RecentlyUsed {
     pub bookmarks: Vec<Bookmark>,
 }
 
-/// A file that was recently opened by the desktop user.
+/// A file bookmarke by the desktop user
 #[derive(Debug, Clone, Deserialize, Serialize)]
 #[serde(rename_all = "kebab-case")]
 pub struct Bookmark {
@@ -128,55 +128,55 @@ pub struct Application {
     pub count: u32,
 }
 
-/// An error that can occur when accessing recently-used files.
+/// An error that can occur when accessing user places files.
 #[derive(Debug, thiserror::Error)]
 pub enum Error {
-    #[error("~/.local/share/recently-used.xbel: file does not exist")]
+    #[error("~/.local/share/user-places.xbel: file does not exist")]
     DoesNotExist,
-    #[error("~/.local/share/recently-used.xbel: could not deserialize")]
+    #[error("~/.local/share/user-places.xbel: could not deserialize")]
     Deserialization(#[source] DeError),
     #[error("could not serialize new file")]
     Serialization(#[source] Option<DeError>),
-    #[error("could not read recents file")]
+    #[error("could not read user places file")]
     Read(#[source] std::io::Error),
     #[error("could not read metadata from path")]
     Metadata(#[source] std::io::Error),
     #[error("could not read generate href from path")]
     Path,
-    #[error("could not update recent files")]
+    #[error("could not update user places files")]
     Update,
 }
 
-/// The path where the recently-used.xbel file is expected to be found.
+/// The path where the user-places.xbel file is expected to be found.
 pub fn dir() -> Option<PathBuf> {
-    dirs::home_dir().map(|dir| dir.join(".local/share/recently-used.xbel"))
+    dirs::home_dir().map(|dir| dir.join(".local/share/user-places.xbel"))
 }
 
-/// Convenience function for parsing the recently-used.xbel file in its default location.
-pub fn parse_file() -> Result<RecentlyUsed, Error> {
+/// Convenience function for parsing the user-places.xbel file in its default location.
+pub fn parse_file() -> Result<UserPlaces, Error> {
     let path = dir().ok_or(Error::DoesNotExist)?;
     let file_content = fs::read_to_string(&path).map_err(|err| Error::Read(err))?;
     quick_xml::de::from_str(&file_content).map_err(|err| Error::Deserialization(err))
 }
 
-/// Clear the list of recently used files.
-pub fn clear_recently_used() -> Result<(), Error> {
+/// Clear the list of user-bookmarked places.
+pub fn clear_user_places() -> Result<(), Error> {
     let mut parsed_file = parse_file()?;
     parsed_file.bookmarks.clear();
 
     let serialized = custom_write(parsed_file.clone())?;
-    let recently_used_file_path = dir().ok_or(Error::DoesNotExist)?;
+    let user_places_file_path = dir().ok_or(Error::DoesNotExist)?;
     let xml_declaration = r#"<?xml version="1.0" encoding="UTF-8"?>"#;
     let full_content = format!("{}{}", xml_declaration, serialized);
 
-    fs::write(recently_used_file_path, full_content).map_err(|_| Error::Update)?;
+    fs::write(user_places_file_path, full_content).map_err(|_| Error::Update)?;
 
     Ok(())
 }
 
-/// Updates the list of recently used files.
+/// Updates the list of user bookmarked files.
 ///
-/// This function checks if the specified file already exists in the recently used list.
+/// This function checks if the specified file already exists in the user places list.
 /// If it exists, the function updates the file's metadata, including the times when the file was
 /// added, modified, and last visited. If the file does not exist in the list, the function adds
 /// a new entry for the file.
@@ -203,9 +203,9 @@ pub fn clear_recently_used() -> Result<(), Error> {
 /// This function can return errors in the following cases:
 ///
 /// - If the file's metadata cannot be accessed or read.
-/// - If the recently used file list cannot be parsed or serialized.
+/// - If the bookmarked file list cannot be parsed or serialized.
 /// - If there is an issue writing the updated list back to the file system.
-pub fn update_recently_used(
+pub fn update_user_place(
     element_path: &PathBuf,
     app_name: String,
     exec: String,
@@ -283,16 +283,16 @@ pub fn update_recently_used(
     }
 
     let serialized = custom_write(parsed_file.clone())?;
-    let recently_used_file_path = dir().ok_or(Error::DoesNotExist)?;
+    let user_places_file_path = dir().ok_or(Error::DoesNotExist)?;
     let xml_declaration = r#"<?xml version="1.0" encoding="UTF-8"?>"#;
     let full_content = format!("{}{}", xml_declaration, serialized);
 
-    fs::write(recently_used_file_path, full_content).map_err(|_| Error::Update)?;
+    fs::write(user_places_file_path, full_content).map_err(|_| Error::Update)?;
 
     Ok(())
 }
 
-/// Removes elements from the list of recently used files.
+/// Removes elements from the list of user-bookmarked files.
 ///
 /// # Arguments
 ///
@@ -311,7 +311,7 @@ pub fn update_recently_used(
 /// - If the file's metadata cannot be accessed or read.
 /// - If the recently used file list cannot be parsed or serialized.
 /// - If there is an issue writing the updated list back to the file system.
-pub fn remove_recently_used(element_paths: &[&Path]) -> Result<(), Error> {
+pub fn remove_user_place(element_paths: &[&Path]) -> Result<(), Error> {
     let mut parsed_file = parse_file()?;
 
     let mut hrefs = HashSet::with_capacity(element_paths.len());
@@ -322,11 +322,11 @@ pub fn remove_recently_used(element_paths: &[&Path]) -> Result<(), Error> {
     parsed_file.bookmarks.retain(|b| !hrefs.contains(&b.href));
 
     let serialized = custom_write(parsed_file.clone())?;
-    let recently_used_file_path = dir().ok_or(Error::DoesNotExist)?;
+    let user_places_file_path = dir().ok_or(Error::DoesNotExist)?;
     let xml_declaration = r#"<?xml version="1.0" encoding="UTF-8"?>"#;
     let full_content = format!("{}{}", xml_declaration, serialized);
 
-    fs::write(recently_used_file_path, full_content).map_err(|_| Error::Update)?;
+    fs::write(user_places_file_path, full_content).map_err(|_| Error::Update)?;
 
     Ok(())
 }
@@ -362,26 +362,26 @@ mod tests {
     use tempfile::tempdir;
 
     #[test]
-    fn test_update_recenty_used() -> Result<(), Box<dyn std::error::Error>> {
+    fn test_update_user_place() -> Result<(), Box<dyn std::error::Error>> {
         let temp_dir = tempdir()?;
         let temp_file_path = temp_dir.path().join("test_file.txt");
-        let recently_used_path = dir().ok_or(Error::DoesNotExist)?;
+        let user_places_file_path = dir().ok_or(Error::DoesNotExist)?;
 
         fs::write(&temp_file_path, b"Test content")?;
 
-        if !recently_used_path.exists() {
-            create_empty_recently_used_file(&recently_used_path)?;
+        if !user_places_file_path.exists() {
+            create_empty_user_places_file(&user_places_file_path)?;
         }
 
-        update_recently_used(
+        update_user_place(
             &temp_file_path,
             String::from("org.test"),
             String::from("test"),
             None,
         )?;
 
-        // check new file name is in recents
-        let content = fs::read_to_string(&recently_used_path)?;
+        // check new file name is in user places file
+        let content = fs::read_to_string(&user_places_file_path)?;
         assert!(content.contains("test_file.txt"));
 
         let deserialized = parse_file()?;
@@ -397,10 +397,10 @@ mod tests {
 
         let length_before_remove = deserialized.bookmarks.len();
 
-        remove_recently_used(&[&temp_file_path])?;
+        remove_user_place(&[&temp_file_path])?;
 
-        // Check that the file name was removed from recents
-        let content = fs::read_to_string(&recently_used_path)?;
+        // Check that the file name was removed from user places file
+        let content = fs::read_to_string(&user_places_file_path)?;
         assert!(!content.contains("test_file.txt"));
 
         let deserialized = parse_file()?;
@@ -417,8 +417,8 @@ mod tests {
         Ok(())
     }
 
-    fn create_empty_recently_used_file(path: &PathBuf) -> Result<(), Error> {
-        let empty_file = RecentlyUsed {
+    fn create_empty_user_places_file(path: &PathBuf) -> Result<(), Error> {
+        let empty_file = UserPlaces {
             bookmarks: vec![],
             xmlns_mime: String::new(),
             xmlns_bookmark: String::new(),

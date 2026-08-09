@@ -1,12 +1,12 @@
-# recently-used-xbel
+# user-places-xbel
 
-Rust crate for reading the contents of `${HOME}/.local/share/recently-used.xbel`.
+Rust crate for reading the contents of `${HOME}/.local/share/user-places.xbel`.
 
 ```rs
 fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let recently_used = recently_used_xbel::parse_file()?;
+    let user_places = user_places_xbel::parse_file()?;
 
-    for bookmark in recently_used.bookmarks {
+    for bookmark in user_places.bookmarks {
         println!("{:#?}", bookmark);
     }
 

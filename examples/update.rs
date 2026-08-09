@@ -4,7 +4,7 @@ use std::{
     path::PathBuf,
 };
 
-use recently_used_xbel::update_recently_used;
+use user_places_xbel::update_user_place;
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("creating file");
@@ -17,7 +17,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let path = fs::canonicalize(&path)?;
 
-    let res = update_recently_used(
+    let res = update_user_place(
         &path,
         "org.cosmic.test-script".to_string(),
         String::from("test-script"),

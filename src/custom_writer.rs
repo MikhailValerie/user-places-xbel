@@ -1,12 +1,12 @@
-// Copyright 2024 System76 <info@system76.com>
+// Copyright 2026 Andrew Moran <developer@moran.io>
 // SPDX-License-Identifier: MPL-2.0
 
-use crate::RecentlyUsed;
+use crate::UserPlaces;
 use quick_xml::writer::Writer;
 use quick_xml::Error;
 use std::io::Cursor;
 
-pub fn custom_write(recently_used: RecentlyUsed) -> Result<String, crate::Error> {
+pub fn custom_write(user_places: UserPlaces) -> Result<String, crate::Error> {
     let mut writer = Writer::new(Cursor::new(Vec::new()));
 
     let _ = writer
@@ -26,7 +26,7 @@ pub fn custom_write(recently_used: RecentlyUsed) -> Result<String, crate::Error>
             .into_iter(),
         )
         .write_inner_content::<_, Error>(|writer| {
-            for b in recently_used.bookmarks {
+            for b in user_places.bookmarks {
                 let _ = writer
                     .create_element("bookmark")
                     .with_attributes([
