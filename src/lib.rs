@@ -131,8 +131,12 @@ pub struct Application {
 /// An error that can occur when accessing user places files.
 #[derive(Debug, thiserror::Error)]
 pub enum Error {
+    #[error("~/.local/share/~user-places.xbel: file already exists")]
+    AlreadyExists,
     #[error("~/.local/share/user-places.xbel: file does not exist")]
     DoesNotExist,
+    #[error("~/.local/share/user-places.xbel~: failed to rename file")]
+    Rename,
     #[error("~/.local/share/user-places.xbel: could not deserialize")]
     Deserialization(#[source] DeError),
     #[error("could not serialize new file")]
@@ -147,9 +151,15 @@ pub enum Error {
     Update,
 }
 
+
 /// The path where the user-places.xbel file is expected to be found.
 pub fn dir() -> Option<PathBuf> {
     dirs::home_dir().map(|dir| dir.join(".local/share/user-places.xbel"))
+}
+
+/// The path where the user-places.xbel file is expected to be found.
+fn dirtmp() -> Option<PathBuf> {
+    dir().map(|dir| dir.join("~"))
 }
 
 /// Convenience function for parsing the user-places.xbel file in its default location.
@@ -159,19 +169,32 @@ pub fn parse_file() -> Result<UserPlaces, Error> {
     quick_xml::de::from_str(&file_content).map_err(|err| Error::Deserialization(err))
 }
 
+/// Wite out the new content to the user places file
+pub fn write_user_places(parsed_file: UserPlaces) -> Result<(), Error> {
+    // Prepare to write the content
+    let serialized = custom_write(parsed_file.clone())?;
+    let xml_declaration = r#"<?xml version="1.0" encoding="UTF-8"?>"#;
+    let full_content = format!("{}{}", xml_declaration, serialized);
+
+    // Write to temp file
+    let user_places_temp_file_path = dirtmp().ok_or(Error::DoesNotExist)?;
+    {
+        let f = std::File::create_new(user_places_temp_file_path)?;
+        f.write_all(&full_content).map_err(|_| Error::Update)?;
+    }
+
+    // Atomically swap the temp and real files
+    let user_places_file_path = dir().ok_or(Error::DoesNotExist)?;
+    fs::rename(&user_places_temp_file_path, &user_places_file_path).map_err(|_| Error::Rename)?;
+
+    Ok(())
+}
+
 /// Clear the list of user-bookmarked places.
 pub fn clear_user_places() -> Result<(), Error> {
     let mut parsed_file = parse_file()?;
     parsed_file.bookmarks.clear();
-
-    let serialized = custom_write(parsed_file.clone())?;
-    let user_places_file_path = dir().ok_or(Error::DoesNotExist)?;
-    let xml_declaration = r#"<?xml version="1.0" encoding="UTF-8"?>"#;
-    let full_content = format!("{}{}", xml_declaration, serialized);
-
-    fs::write(user_places_file_path, full_content).map_err(|_| Error::Update)?;
-
-    Ok(())
+    return write_user_places(parsed_file)
 }
 
 /// Updates the list of user bookmarked files.
@@ -282,14 +305,7 @@ pub fn update_user_place(
         parsed_file.bookmarks.push(new_bookmark);
     }
 
-    let serialized = custom_write(parsed_file.clone())?;
-    let user_places_file_path = dir().ok_or(Error::DoesNotExist)?;
-    let xml_declaration = r#"<?xml version="1.0" encoding="UTF-8"?>"#;
-    let full_content = format!("{}{}", xml_declaration, serialized);
-
-    fs::write(user_places_file_path, full_content).map_err(|_| Error::Update)?;
-
-    Ok(())
+    return write_user_places(parsed_file);
 }
 
 /// Removes elements from the list of user-bookmarked files.
@@ -313,22 +329,12 @@ pub fn update_user_place(
 /// - If there is an issue writing the updated list back to the file system.
 pub fn remove_user_place(element_paths: &[&Path]) -> Result<(), Error> {
     let mut parsed_file = parse_file()?;
-
     let mut hrefs = HashSet::with_capacity(element_paths.len());
     for path in element_paths {
         hrefs.insert(path_to_href(path).ok_or(Error::Path)?);
     }
-
     parsed_file.bookmarks.retain(|b| !hrefs.contains(&b.href));
-
-    let serialized = custom_write(parsed_file.clone())?;
-    let user_places_file_path = dir().ok_or(Error::DoesNotExist)?;
-    let xml_declaration = r#"<?xml version="1.0" encoding="UTF-8"?>"#;
-    let full_content = format!("{}{}", xml_declaration, serialized);
-
-    fs::write(user_places_file_path, full_content).map_err(|_| Error::Update)?;
-
-    Ok(())
+    return write_user_places(parsed_file);
 }
 
 fn system_time_to_string(time: SystemTime) -> String {
