@@ -172,8 +172,8 @@ pub fn write_user_places(parsed_file: UserPlaces) -> Result<(), Error> {
     let full_content = format!("{}{}", xml_declaration, serialized);
 
     // Atomically write out the new file
-    let user_places_file = dir().ok_or(Error::DoesNotExist)?;
-    let af = AtomicFile::new(user_places_file, AllowOverwrite);
+    let user_places_file = dir().unwrap();
+    let af = AtomicFile::new(&user_places_file, AllowOverwrite);
     af.write(|f| { f.write_all(&full_content.into_bytes()) }).map_err(|_| Error::Update)?;
 
     Ok(())
