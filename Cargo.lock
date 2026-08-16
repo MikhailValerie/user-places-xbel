@@ -18,6 +18,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "atomicwrites"
+version = "0.4.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "3ef1bb8d1b645fe38d51dfc331d720fb5fc2c94b440c76cc79c80ff265ca33e3"
+dependencies = [
+ "rustix",
+ "tempfile",
+ "windows-sys 0.52.0",
+]
+
+[[package]]
 name = "autocfg"
 version = "1.3.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -472,8 +483,9 @@ dependencies = [
 
 [[package]]
 name = "user-places-xbel"
-version = "1.2.0"
+version = "1.3.0"
 dependencies = [
+ "atomicwrites",
  "chrono",
  "dirs",
  "infer",
