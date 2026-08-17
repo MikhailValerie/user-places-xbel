@@ -5,11 +5,22 @@
 //!
 //! ```
 //! fn main() -> Result<(), Box<dyn std::error::Error>> {
-//!     let user_places = user_places_xbel::parse_file()?;
 //!
+//!     let temp_file_path = tempfile::tempdir().path().join("test_file.txt");
+//!
+//!     user_places_xbel::update_user_place(
+//!         &temp_file_path,
+//!         String::from("org.test"),
+//!         String::from("test"),
+//!         None,
+//!     )?;
+//!
+//!     let user_places = user_places_xbel::read_user_places()?;
 //!     for bookmark in user_places.bookmarks {
 //!         println!("{:?}", bookmark);
 //!     }
+//!
+//!     user_places_xbel::remove_user_place(&temp_file_path)?;
 //!
 //!     Ok(())
 //! }
@@ -30,6 +41,9 @@ use url::Url;
 use atomicwrites::{AtomicFile,AllowOverwrite};
 
 mod custom_writer;
+
+// The normal user-places.xbel file name location
+const USER_PLACES_FILE_SUBPATH: &str = ".local/share/user-places.xbel";
 
 /// Stores places bookmarked by the desktop user
 #[derive(Debug, Clone, Deserialize, Serialize)]
@@ -151,10 +165,19 @@ pub enum Error {
     
 }
 
-
 /// The path where the user-places.xbel file is expected to be found.
 pub fn dir() -> Option<PathBuf> {
-    dirs::home_dir().map(|dir| dir.join(".local/share/user-places.xbel"))
+    dirs::home_dir().map(|dir| dir.join(USER_PLACES_FILE_SUBPATH))
+}
+
+/// Read bookmarks from the user-places.xbel file, creates the file if needed
+pub fn read_user_places() -> Result<UserPlaces, Error> {
+    let path = dir().ok_or(Error::DoesNotExist)?;
+    if !path.exists() {
+        create_empty_user_places_file();
+    }
+    let file_content = fs::read_to_string(&path).map_err(|err| Error::Read(err))?;
+    quick_xml::de::from_str(&file_content).map_err(|err| Error::Deserialization(err))
 }
 
 /// Convenience function for parsing the user-places.xbel file in its default location.
@@ -164,26 +187,11 @@ pub fn parse_file() -> Result<UserPlaces, Error> {
     quick_xml::de::from_str(&file_content).map_err(|err| Error::Deserialization(err))
 }
 
-/// Wite out the new content to the user places file
-pub fn write_user_places(parsed_file: UserPlaces) -> Result<(), Error> {
-    // Prepare the file content
-    let serialized = custom_write(parsed_file.clone())?;
-    let xml_declaration = r#"<?xml version="1.0" encoding="UTF-8"?>"#;
-    let full_content = format!("{}{}", xml_declaration, serialized);
-
-    // Atomically write out the new file
-    let user_places_file = dir().unwrap();
-    let af = AtomicFile::new(&user_places_file, AllowOverwrite);
-    af.write(|f| { f.write_all(&full_content.into_bytes()) }).map_err(|_| Error::Update)?;
-
-    Ok(())
-}
-
 /// Clear the list of user-bookmarked places.
 pub fn clear_user_places() -> Result<(), Error> {
-    let mut parsed_file = parse_file()?;
-    parsed_file.bookmarks.clear();
-    return write_user_places(parsed_file)
+    let mut user_places = read_user_places()?;
+    user_places.bookmarks.clear();
+    return write_user_places(user_places)
 }
 
 /// Updates the list of user bookmarked files.
@@ -227,7 +235,7 @@ pub fn update_user_place(
         Some(owner) => owner,
         None => "http://freedesktop.org".to_string(),
     };
-    let mut parsed_file = parse_file()?;
+    let mut user_places = read_user_places()?;
     let href = path_to_href(element_path).ok_or(Error::Path)?;
     let metadata = element_path.metadata().map_err(Error::Metadata)?;
     let added = system_time_to_string(metadata.created().map_err(Error::Metadata)?);
@@ -235,7 +243,7 @@ pub fn update_user_place(
     let visited = system_time_to_string(metadata.accessed().map_err(Error::Metadata)?);
 
     // Attempt to find the existing bookmark and update it if found
-    let existing_bookmark = parsed_file.bookmarks.iter_mut().find(|b| b.href == href);
+    let existing_bookmark = user_places.bookmarks.iter_mut().find(|b| b.href == href);
 
     if let Some(bookmark) = existing_bookmark {
         // Bookmark exists, update the metadata
@@ -291,10 +299,10 @@ pub fn update_user_place(
             info: Some(info),
         };
 
-        parsed_file.bookmarks.push(new_bookmark);
+        user_places.bookmarks.push(new_bookmark);
     }
 
-    return write_user_places(parsed_file);
+    return write_user_places(user_places);
 }
 
 /// Removes elements from the list of user-bookmarked files.
@@ -317,13 +325,13 @@ pub fn update_user_place(
 /// - If the recently used file list cannot be parsed or serialized.
 /// - If there is an issue writing the updated list back to the file system.
 pub fn remove_user_place(element_paths: &[&Path]) -> Result<(), Error> {
-    let mut parsed_file = parse_file()?;
+    let mut user_places = read_user_places()?;
     let mut hrefs = HashSet::with_capacity(element_paths.len());
     for path in element_paths {
         hrefs.insert(path_to_href(path).ok_or(Error::Path)?);
     }
-    parsed_file.bookmarks.retain(|b| !hrefs.contains(&b.href));
-    return write_user_places(parsed_file);
+    user_places.bookmarks.retain(|b| !hrefs.contains(&b.href));
+    return write_user_places(user_places);
 }
 
 fn system_time_to_string(time: SystemTime) -> String {
@@ -347,6 +355,32 @@ fn mime_from_path(path: &Path) -> Option<String> {
     Some(format!("{}/{}", mime.type_(), mime.subtype()))
 }
 
+/// Create an empty user places file
+fn create_empty_user_places_file() -> Result<(), Error> {
+    let path = dir().ok_or(Error::DoesNotExist)?;
+    let empty_user_places = UserPlaces {
+        bookmarks: vec![],
+        xmlns_mime: String::new(),
+        xmlns_bookmark: String::new(),
+    };
+    return write_user_places(empty_user_places);
+}
+
+/// Write out bookmarks to the user places file
+fn write_user_places(contents: UserPlaces) -> Result<(), Error> {
+    // Prepare the file content
+    let serialized = custom_write(contents.clone())?;
+    let xml_declaration = r#"<?xml version="1.0" encoding="UTF-8"?>"#;
+    let full_content = format!("{}{}", xml_declaration, serialized);
+
+    // Atomically write out the new file
+    let path = dir().ok_or(Error::DoesNotExist)?;
+    let af = AtomicFile::new(&path, AllowOverwrite);
+    af.write(|f| { f.write_all(&full_content.into_bytes()) }).map_err(|_| Error::Update)?;
+
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -358,16 +392,16 @@ mod tests {
 
     #[test]
     fn test_update_user_place() -> Result<(), Box<dyn std::error::Error>> {
+
+        // Check that we can read from the file.  Creates the file if it doesn't exist
+        let content = read_user_places()?;
+
+        // Create a temp file for testing with
         let temp_dir = tempdir()?;
         let temp_file_path = temp_dir.path().join("test_file.txt");
-        let user_places_file_path = dir().ok_or(Error::DoesNotExist)?;
-
         fs::write(&temp_file_path, b"Test content")?;
-
-        if !user_places_file_path.exists() {
-            create_empty_user_places_file(&user_places_file_path)?;
-        }
-
+        
+        // Write the temp file to the user-places.xbel file
         update_user_place(
             &temp_file_path,
             String::from("org.test"),
@@ -375,33 +409,40 @@ mod tests {
             None,
         )?;
 
-        // check new file name is in user places file
+        // Check for the raw text inside the user-places.xbel file
         let content = fs::read_to_string(&user_places_file_path)?;
-        assert!(content.contains("test_file.txt"));
+        assert!(content.contains(&test_file));
 
-        let deserialized = parse_file()?;
+        // Check that the user-places.xbel file can be read correctly
+        let user_places = read_user_places()?;
 
-        assert!(deserialized.bookmarks.len() > 0);
+        assert!(user_places.bookmarks.len() > 0);
 
-        let bookmark = deserialized
+        // Check that the test bookmark is stored correctly
+        let bookmark = user_places
             .bookmarks
             .iter()
             .find(|el| el.href.contains("test_file"));
 
         assert!(bookmark.is_some());
 
-        let length_before_remove = deserialized.bookmarks.len();
-
+        // Remove the testing file bookmark
+        let length_before_remove = user_places.bookmarks.len();
         remove_user_place(&[&temp_file_path])?;
 
-        // Check that the file name was removed from user places file
+        // Check that the raw text has been removed
         let content = fs::read_to_string(&user_places_file_path)?;
-        assert!(!content.contains("test_file.txt"));
+        assert!(!content.contains(&test_file));
 
-        let deserialized = parse_file()?;
+        // Check that the user-places.xbel file can still be read correctly
+        let user_places = read_user_places()?;
 
-        assert!(deserialized.bookmarks.len() == length_before_remove - 1);
+        assert!(user_places.bookmarks.len() > 0);
 
+        // Check that we haven't lost any other bookmarks
+        assert!(user_places.bookmarks.len() == length_before_remove - 1);
+
+        // Check that the testing file bookmark has been removed
         let bookmark = deserialized
             .bookmarks
             .iter()
@@ -409,24 +450,8 @@ mod tests {
 
         assert!(bookmark.is_none());
 
+        // Test was successful
         Ok(())
     }
 
-    fn create_empty_user_places_file(path: &PathBuf) -> Result<(), Error> {
-        let empty_file = UserPlaces {
-            bookmarks: vec![],
-            xmlns_mime: String::new(),
-            xmlns_bookmark: String::new(),
-        };
-        let serialized =
-            quick_xml::se::to_string(&empty_file).map_err(|why| Error::Serialization(Some(why)))?;
-        let mut file = OpenOptions::new()
-            .write(true)
-            .create(true)
-            .open(path)
-            .map_err(|_| Error::Update)?;
-        file.write_all(serialized.as_bytes())
-            .map_err(|_| Error::Update)?;
-        Ok(())
-    }
 }

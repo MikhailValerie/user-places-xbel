@@ -2,16 +2,28 @@
 
 Rust crate for reading the contents of `${HOME}/.local/share/user-places.xbel`.
 
-```rs
+```
 fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let user_places = user_places_xbel::parse_file()?;
 
+    let temp_file_path = tempfile::tempdir().path().join("test_file.txt");
+
+    user_places_xbel::update_user_place(
+        &temp_file_path,
+        String::from("org.test"),
+        String::from("test"),
+        None,
+    )?;
+
+    let user_places = user_places_xbel::read_user_places()?;
     for bookmark in user_places.bookmarks {
-        println!("{:#?}", bookmark);
+        println!("{:?}", bookmark);
     }
+
+    user_places_xbel::remove_user_place(&temp_file_path)?;
 
     Ok(())
 }
+
 ```
 
 ## License
