@@ -85,7 +85,7 @@ pub struct Bookmark {
 pub struct Info {
     /// Metadata about the bookmark.
     #[serde(rename = "metadata")]
-    pub metadata: Metadata,
+    pub metadata: Vec<Metadata>,
 }
 
 /// Metadata containing MIME type and application info.
@@ -255,25 +255,28 @@ pub fn update_user_place(
 
         // Find the application entry or insert a new one
         if let Some(info) = bookmark.info.as_mut() {
-            let mut info_meta_apps = vec![];
-            if Some(info.metadata.applications.clone()).is_some() {
-                info_meta_apps = info.metadata.applications.clone().unwrap().applications;
-            }
-            if let Some(app) = info_meta_apps
-                .iter_mut()
-                .find(|el| el.name == app_name)
-            {
-                app.count += 1;
-                app.modified = modified.clone();
-            } else {
-                // Application not found, insert a new one
-                info_meta_apps.push(Application {
-                    name: app_name,
-                    exec,
-                    modified: modified.clone(),
-                    count: 1,
-                });
-                info.metadata.applications = Some(Applications { applications: info_meta_apps });
+            for m in &mut info.metadata {
+                let mut info_meta_apps = vec![];
+                if Some(m.applications.clone()).is_some() {
+                    info_meta_apps = m.applications.clone().unwrap().applications;
+                }
+                if let Some(app) = info_meta_apps
+                    .iter_mut()
+                    .find(|el| el.name == app_name)
+                {
+                    app.count += 1;
+                    app.modified = modified.clone();
+                } else {
+                    // Application not found, insert a new one
+                    info_meta_apps.push(Application {
+                        name: app_name.clone(),
+                        exec: exec.clone(),
+                        modified: modified.clone(),
+                        count: 1,
+                    });
+                    m.applications = Some(Applications { applications: info_meta_apps });
+                }
+
             }
         }
     } else {
@@ -288,11 +291,11 @@ pub fn update_user_place(
         }];
 
         let info = Info {
-            metadata: Metadata {
+            metadata: vec![Metadata {
                 owner,
                 mime_type: mime,
                 applications: Some(Applications { applications }),
-            },
+            }],
         };
 
         let new_bookmark = Bookmark {

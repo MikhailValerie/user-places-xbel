@@ -52,44 +52,46 @@ pub fn custom_write(user_places: UserPlaces) -> Result<String, crate::Error> {
                             let _ = writer
                                 .create_element("info")
                                 .write_inner_content::<_, Error>(|writer| {
-                                    let _ = writer
-                                        .create_element("metadata")
-                                        .with_attributes([("owner", info.metadata.owner.as_str())])
-                                        .write_inner_content::<_, Error>(|writer| {
-                                            if let Some(mime) = info.metadata.mime_type {
+                                    for m in info.metadata {
+                                        let _ = writer
+                                            .create_element("metadata")
+                                            .with_attributes([("owner", m.owner.as_str())])
+                                            .write_inner_content::<_, Error>(|writer| {
+                                                if let Some(mime) = m.mime_type {
+                                                    let _ = writer
+                                                        .create_element("mime:mime-type")
+                                                        .with_attributes([(
+                                                            "type",
+                                                            mime.mime_type.as_str(),
+                                                        )])
+                                                        .write_empty();
+                                                }
                                                 let _ = writer
-                                                    .create_element("mime:mime-type")
-                                                    .with_attributes([(
-                                                        "type",
-                                                        mime.mime_type.as_str(),
-                                                    )])
-                                                    .write_empty();
-                                            }
-                                            let _ = writer
-                                                .create_element("bookmark:applications")
-                                                .write_inner_content::<_, Error>(|writer| {
-                                                    let mut apps = vec![];
-                                                    if info.metadata.applications.is_some() {
-                                                        apps = info.metadata.applications.unwrap().applications
-                                                    }
-                                                    for app in apps {
-                                                        let _ = writer
-                                                            .create_element("bookmark:application")
-                                                            .with_attributes([
-                                                                ("name", app.name.as_str()),
-                                                                ("exec", app.exec.as_str()),
-                                                                ("modified", app.modified.as_str()),
-                                                                (
-                                                                    "count",
-                                                                    app.count.to_string().as_str(),
-                                                                ),
-                                                            ])
-                                                            .write_empty();
-                                                    }
-                                                    Ok(())
-                                                });
-                                            Ok(())
-                                        });
+                                                    .create_element("bookmark:applications")
+                                                    .write_inner_content::<_, Error>(|writer| {
+                                                        let mut apps = vec![];
+                                                        if m.applications.is_some() {
+                                                            apps = m.applications.unwrap().applications
+                                                        }
+                                                        for app in apps {
+                                                            let _ = writer
+                                                                .create_element("bookmark:application")
+                                                                .with_attributes([
+                                                                    ("name", app.name.as_str()),
+                                                                    ("exec", app.exec.as_str()),
+                                                                    ("modified", app.modified.as_str()),
+                                                                    (
+                                                                        "count",
+                                                                        app.count.to_string().as_str(),
+                                                                    ),
+                                                                ])
+                                                                .write_empty();
+                                                        }
+                                                        Ok(())
+                                                    });
+                                                Ok(())
+                                            });
+                                    }
                                     Ok(())
                                 });
                         }
