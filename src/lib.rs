@@ -68,13 +68,13 @@ pub struct Bookmark {
     pub href: String,
     /// When the file was added to the list.
     #[serde(rename = "@added")]
-    pub added: String,
+    pub added: Option<String>,
     /// When the file was last modified.
     #[serde(rename = "@modified")]
-    pub modified: String,
+    pub modified: Option<String>,
     /// When the file was last visited.
     #[serde(rename = "@visited")]
-    pub visited: String,
+    pub visited: Option<String>,
     /// Additional metadata and applications related to the bookmark.
     #[serde(rename = "info")]
     pub info: Option<Info>,
@@ -102,7 +102,7 @@ pub struct Metadata {
 
     /// The applications that have accessed the file.
     #[serde(rename = "applications")]
-    pub applications: Applications,
+    pub applications: Option<Applications>,
 }
 
 /// The MIME type of the file.
@@ -118,9 +118,9 @@ pub struct MimeType {
 #[derive(Debug, Clone, Deserialize, Serialize)]
 #[serde(rename_all = "kebab-case")]
 pub struct Applications {
-    /// The list of applications.
-    //#[serde(rename(deserialize="application", serialize="bookmark:applications"))]
-    #[serde(rename = "application")]
+    // The list of applications.
+    // #[serde(rename(deserialize="application", serialize="bookmark:applications"))]
+    #[serde(rename = "application", default)]
     pub applications: Vec<Application>,
 }
 
@@ -174,7 +174,7 @@ pub fn dir() -> Option<PathBuf> {
 pub fn read_user_places() -> Result<UserPlaces, Error> {
     let path = dir().ok_or(Error::DoesNotExist)?;
     if !path.exists() {
-        create_empty_user_places_file();
+        let _ = create_empty_user_places_file();
     }
     let file_content = fs::read_to_string(&path).map_err(|err| Error::Read(err))?;
     quick_xml::de::from_str(&file_content).map_err(|err| Error::Deserialization(err))
@@ -246,17 +246,20 @@ pub fn update_user_place(
     let existing_bookmark = user_places.bookmarks.iter_mut().find(|b| b.href == href);
 
     if let Some(bookmark) = existing_bookmark {
+        let modified_clone = modified.clone();
+
         // Bookmark exists, update the metadata
-        bookmark.added = added;
-        bookmark.modified = modified.clone();
-        bookmark.visited = visited;
+        bookmark.added = Some(added);
+        bookmark.modified = Some(modified_clone);
+        bookmark.visited = Some(visited);
 
         // Find the application entry or insert a new one
         if let Some(info) = bookmark.info.as_mut() {
-            if let Some(app) = info
-                .metadata
-                .applications
-                .applications
+            let mut info_meta_apps = vec![];
+            if Some(info.metadata.applications.clone()).is_some() {
+                info_meta_apps = info.metadata.applications.clone().unwrap().applications;
+            }
+            if let Some(app) = info_meta_apps
                 .iter_mut()
                 .find(|el| el.name == app_name)
             {
@@ -264,12 +267,13 @@ pub fn update_user_place(
                 app.modified = modified.clone();
             } else {
                 // Application not found, insert a new one
-                info.metadata.applications.applications.push(Application {
+                info_meta_apps.push(Application {
                     name: app_name,
                     exec,
                     modified: modified.clone(),
                     count: 1,
                 });
+                info.metadata.applications = Some(Applications { applications: info_meta_apps });
             }
         }
     } else {
@@ -287,15 +291,15 @@ pub fn update_user_place(
             metadata: Metadata {
                 owner,
                 mime_type: mime,
-                applications: Applications { applications },
+                applications: Some(Applications { applications }),
             },
         };
 
         let new_bookmark = Bookmark {
             href,
-            added,
-            modified,
-            visited,
+            added: Some(added),
+            modified: Some(modified),
+            visited: Some(visited),
             info: Some(info),
         };
 
@@ -357,7 +361,6 @@ fn mime_from_path(path: &Path) -> Option<String> {
 
 /// Create an empty user places file
 fn create_empty_user_places_file() -> Result<(), Error> {
-    let path = dir().ok_or(Error::DoesNotExist)?;
     let empty_user_places = UserPlaces {
         bookmarks: vec![],
         xmlns_mime: String::new(),
